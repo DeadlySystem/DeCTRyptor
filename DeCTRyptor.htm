@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="setImmediate/setImmediate.js"></script>
+    <script src="StreamSaver.js/StreamSaver.js"></script>
+    <script src="web-streams-polyfill/dist/polyfill.min.js"></script>
+
+    <script type="text/javascript" src="SecretProvider.js"></script>
+    <script type="text/javascript" src="CTRCryptoEngine.js"></script>
+    <script type="text/javascript" src="NCCHInfoParser.js"></script>
+    <script type="text/javascript" src="FileDropHandler.js"></script>
+    <script type="text/javascript" src="Tests.js"></script>
+    <script type="text/javascript">
+        /**
+         * Ideally, this function should mimic the implementation found here:
+         *
+         * https://github.com/d0k3/Decrypt9WIP/blob/b2e58da40da001042a39fa0925a512c3fb7ad2e8/source/decryptor/xorpad.c
+         */
+        function createXorPad(entry)
+        {
+            const chunkSize = 1024 * 1024; //1 MB
+            const data = new Uint8Array(chunkSize); //Initialized to zero
+            const filename = entry.outputName.substr(1); //Strip away initial /
+            const keySlot = 0x2C;
+
+            const fileStream = streamSaver.createWriteStream(filename);
+            const writer = fileStream.getWriter();
+
+            const secretProvider = new SecretProvider();
+            secretProvider.getKeyScramblerConstant(
+                function (c) {
+                    const engine = new CTRCryptoEngine(CTRCryptoEngine.stringKeyToArrayBuffer(c));
+                    secretProvider.getKeyX(
+                        keySlot,
+                        function (keyX) {
+                            engine.writeKeySlotX(keySlot, CTRCryptoEngine.stringKeyToArrayBuffer(keyX));
+                            engine.writeKeySlotY(keySlot, entry.keyY);
+                            let counter = entry.ctr;
+                            let remainingChunks = entry.mbsize * 1024 * 1024 / chunkSize;
+                            const decrypt = function () {
+                                if (remainingChunks > 0) {
+                                    engine.decrypt(
+                                        data,
+                                        keySlot,
+                                        counter,
+                                        function (decrypted) {
+                                            //Download ArrayBuffer decrypted to a file
+                                            writer.write(new Uint8Array(decrypted)).then(
+                                                function () {
+                                                    --remainingChunks;
+                                                    counter = engine.add(counter, chunkSize / 16);
+                                                    decrypt();
+                                                }
+                                            );
+                                        }
+                                    )
+                                } else {
+                                    writer.close();
+                                }
+                            };
+                            decrypt();
+                        }
+                    );
+                }
+            );
+        }
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            function () {
+                if (!streamSaver.supported) {
+                    document.getElementById("PolyfillWarning").hidden = false;
+                }
+
+                new FileDropHandler(
+                    window,
+                    function (x) {
+                        const parser = new NCCHInfoParser();
+                        const entries = parser.parseNCCHInfo(x);
+                        const downloadLinkContainer = document.getElementById("DownloadLinks");
+                        while (downloadLinkContainer.hasChildNodes()) {
+                            downloadLinkContainer.removeChild(downloadLinkContainer.firstChild);
+                        }
+                        for (let i = 0; i < entries.length; ++i) {
+                            const entry = entries[i];
+                            const a = document.createElement("a");
+                            a.href = "#";
+                            a.textContent = entry.outputName;
+                            a.addEventListener(
+                                "click",
+                                function (event) {
+                                    event.preventDefault();
+                                    createXorPad(entries[i]);
+                                }
+                            );
+
+                            downloadLinkContainer.appendChild(a);
+                            downloadLinkContainer.appendChild(document.createElement("br"));
+                        }
+                    }
+                );
+            }
+        );
+    </script>
+    <style type="text/css">
+        .DragHint
+        {
+            position:fixed;
+            top:0;
+            left:0;
+            width:100vw;
+            height:100vh;
+            background-color:rgba(255, 255, 255, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10em;
+            font-weight:bold;
+            color: #0080FF;
+            pointer-events: none;
+            border-style: dashed;
+            border-width: 0.2em;
+            border-color: #808080;
+            box-sizing: border-box;
+            text-transform:uppercase;
+            font-style:italic;
+            flex-direction: column;
+            visibility: hidden;
+        }
+
+        .DragHint .FileList
+        {
+            font-size: 0.25em;
+        }
+
+        #PolyfillWarning
+        {
+            background-color: #FFC0C0;
+            border-color: #FF0000;
+            border-style: solid;
+            border-width: 4px;
+            font-size: 1.2em;
+            font-weight: bold;
+            padding: 2em;
+            text-align: center;
+        }
+    </style>
+    <title>DeCTRyptor</title>
+</head>
+<body>
+    <aside id="PolyfillWarning" hidden="hidden">
+        This page will use a polyfill for web streams. You can enable native support in Chrome by enabling <i>Experimental Web Platform features</i> here: chrome://flags/#enable-experimental-web-platform-features
+    </aside>
+    <section id="Info">
+        <h1>How to use</h1>
+        <p>
+            Drag and drop an ncchinfo.bin file onto this page
+        </p>
+    </section>
+    <section id="DownloadLinks">
+    </section>
+    <section class="DragHint">
+        <span>Drop to load</span>
+        <ul class="FileList">
+        </ul>
+    </section>
+</body>
+</html>
