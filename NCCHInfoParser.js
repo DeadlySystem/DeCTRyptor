@@ -31,6 +31,9 @@ class NCCHInfoParser
         }
 
         const version = (view.getUint32(4, true) & 0x0FFFFFFF);
+        if (version !== 4) {
+            throw Error("Unsupported ncchinfo.bin version: " + version);
+        }
         console.log('Parsing ncchinfo.bin version ' + version);
 
         const entryCount = view.getUint32(8, true);
@@ -52,12 +55,21 @@ class NCCHInfoParser
                 }
             }
 
+            const uses9xSeedCrypto = view.getUint32(entryOffset + 40, true);
+            if (uses9xSeedCrypto !== 0x00000000 && uses9xSeedCrypto !== 0x00000001) {
+                throw Error('Unsupported value for uses9xSeedCrypto flag: 0x' + uses9xSeedCrypto.toString(16));
+            }
+            const uses7xCrypto = view.getUint32(entryOffset + 44, true);
+            if (uses7xCrypto !== 0x00000000 && uses7xCrypto !== 0x00000001) {
+                throw Error('Unsupported value for uses7xCrypto flag: 0x' + uses7xCrypto.toString(16));
+            }
+
             let entry = {
                 ctr: new Uint8Array(buffer.slice(entryOffset, entryOffset + 16)),
                 keyY: new Uint8Array(buffer.slice(entryOffset + 16, entryOffset + 32)),
                 mbsize: view.getUint32(entryOffset + 32, true),
-                uses9xSeedCrypto: (view.getUint32(entryOffset + 40, true) === 0x00000001),
-                uses7xCrypto: (view.getUint32(entryOffset + 44, true) === 0x00000001),
+                uses9xSeedCrypto: (uses9xSeedCrypto === 0x00000001),
+                uses7xCrypto: (uses7xCrypto === 0x00000001),
                 titleID: new Uint8Array(buffer.slice(entryOffset + 48, entryOffset + 56)),
                 outputName: decoder.decode(name.slice(0, lastNonZeroByteIndex + 1)),
             };

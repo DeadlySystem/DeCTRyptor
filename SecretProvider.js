@@ -82,17 +82,17 @@ class SecretProvider
             const request = new XMLHttpRequest();
             request.open("GET", "https://docs.google.com/spreadsheets/d/18zzG3p_30cu6nPf3BkvWWDPxqJBE329fREVtpPFisP8/edit", true);
             request.addEventListener(
-                "readystatechange",
+                "load",
                 function (event) {
-                    if (request.readyState === 4) {
-                        if (request.status !== 200) {
-                            throw Error("Could not retrieve secret document!");
-                        }
-
-                        const parser = new DOMParser();
-                        self.secretDoc = parser.parseFromString(request.responseText, "text/html");
-                        callback(self.secretDoc);
-                    }
+                    const parser = new DOMParser();
+                    self.secretDoc = parser.parseFromString(request.responseText, "text/html");
+                    callback(self.secretDoc);
+                }
+            );
+            request.addEventListener(
+                "error",
+                function (event) {
+                    throw Error("Could not retrieve secret document (HTTP Status " + request.status + ")");
                 }
             );
             request.send();

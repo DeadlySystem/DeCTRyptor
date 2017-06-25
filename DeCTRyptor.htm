@@ -12,16 +12,46 @@
     <script type="text/javascript" src="Tests.js"></script>
     <script type="text/javascript">
         /**
-         * Ideally, this function should mimic the implementation found here:
+         * Ideally, this function should mimic the implementation of the NcchPadgen function found here:
          *
          * https://github.com/d0k3/Decrypt9WIP/blob/b2e58da40da001042a39fa0925a512c3fb7ad2e8/source/decryptor/xorpad.c
+         *
+         * Notes:
+         *
+         * THis is how an entry maps to Decrypt9 struct NcchInfoEntry:
+         * #entry (168 bytes in size):
+         * #  16 bytes   Counter => ctr
+         * #  16 bytes   KeyY => keyY
+         * #   4 bytes   Size in MB(rounded up) => size_mb
+         * #   4 bytes   Reserved => size_b
+         * #   4 bytes   Uses 9x SeedCrypto (0 or 1) => ncchFlag7
+         * #   4 bytes   Uses 7x crypto? (0 or 1) => ncchFlag3
+         * #   8 bytes   Title ID => titleId
+         * # 112 bytes   Output file name in UTF-8 (format used: "/titleId.partitionName.sectionName.xorpad") => titleId
          */
         function createXorPad(entry)
         {
             const chunkSize = 1024 * 1024; //1 MB
             const data = new Uint8Array(chunkSize); //Initialized to zero
             const filename = entry.outputName.substr(1); //Strip away initial /
-            const keySlot = 0x2C;
+
+            let keyY = null;
+            if (entry.uses9xSeedCrypto && entry.uses7xCrypto) {
+                throw Error('Entry uses seed crypto - this is not currently supported by this tool.');
+            } else {
+                keyY = entry.keyY;
+            }
+
+            if (entry.uses9xSeedCrypto) {
+                throw Error('Entry uses fixed key crypto - this is not currently supported by this tool.');
+            }
+
+            let keySlot = null;
+            if (entry.uses7xCrypto) {
+                keySlot = 0x25;
+            } else {
+                keySlot = 0x2C;
+            }
 
             const fileStream = streamSaver.createWriteStream(filename);
             const writer = fileStream.getWriter();
@@ -34,7 +64,7 @@
                         keySlot,
                         function (keyX) {
                             engine.writeKeySlotX(keySlot, CTRCryptoEngine.stringKeyToArrayBuffer(keyX));
-                            engine.writeKeySlotY(keySlot, entry.keyY);
+                            engine.writeKeySlotY(keySlot, keyY);
                             let counter = entry.ctr;
                             let remainingChunks = entry.mbsize * 1024 * 1024 / chunkSize;
                             const decrypt = function () {
@@ -76,7 +106,13 @@
                     window,
                     function (x) {
                         const parser = new NCCHInfoParser();
-                        const entries = parser.parseNCCHInfo(x);
+                        let entries = [];
+                        try {
+                            entries = parser.parseNCCHInfo(x);
+                        } catch (e) {
+                            alert(e.message);
+                        }
+
                         const downloadLinkContainer = document.getElementById("DownloadLinks");
                         while (downloadLinkContainer.hasChildNodes()) {
                             downloadLinkContainer.removeChild(downloadLinkContainer.firstChild);
@@ -85,12 +121,23 @@
                             const entry = entries[i];
                             const a = document.createElement("a");
                             a.href = "#";
-                            a.textContent = entry.outputName;
+                            let linkText = entry.outputName + " (" + entry.mbsize + " MB)";
+                            if (entry.uses9xSeedCrypto) {
+                                linkText += " (9x seed crypto)";
+                            }
+                            if (entry.uses7xCrypto) {
+                                linkText += " (7x crypto)";
+                            }
+                            a.textContent = linkText;
                             a.addEventListener(
                                 "click",
                                 function (event) {
                                     event.preventDefault();
-                                    createXorPad(entries[i]);
+                                    try {
+                                        createXorPad(entries[i]);
+                                    } catch (e) {
+                                        alert(e.message);
+                                    }
                                 }
                             );
 
