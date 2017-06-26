@@ -1,10 +1,9 @@
-[submodule "web-streams-polyfill"]
-	path = web-streams-polyfill
-	url = https://github.com/creatorrr/web-streams-polyfill
-	fetchRecurseSubmodules = false
 [submodule "setImmediate"]
 	path = setImmediate
 	url = https://github.com/YuzuJS/setImmediate
 [submodule "StreamSaver.js"]
 	path = StreamSaver.js
 	url = https://github.com/jimmywarting/StreamSaver.js
+[submodule "web-streams-polyfill"]
+	path = web-streams-polyfill
+	url = https://github.com/creatorrr/web-streams-polyfill.git
