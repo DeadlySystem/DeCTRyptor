@@ -50,15 +50,15 @@ class CTRCryptoEngine
      * @param {Uint8Array} data
      * @param {number} keySlot
      * @param {Uint8Array} counter
-     * @param {function} callback
+     * @returns {Promise}
      */
-    decrypt(data, keySlot, counter, callback)
+    decrypt(data, keySlot, counter)
     {
         let keyX = this.keySlotsX[keySlot];
         let keyY = this.keySlotsY[keySlot];
         let normalKey = this.scramble(keyX, keyY);
 
-        crypto.subtle.importKey(
+        return crypto.subtle.importKey(
             'raw',
             normalKey,
             'AES-CTR',
@@ -75,12 +75,6 @@ class CTRCryptoEngine
                     key,
                     data.buffer
                 )
-            }
-        ).then(
-            callback
-        ).catch(
-            function (err) {
-                console.error(err);
             }
         );
     }

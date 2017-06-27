@@ -13,50 +13,65 @@ class SecretProvider
 
     /**
      * @param {number} slot
-     * @param {function} callback
+     * @returns {Promise}
      */
-    getKeyX(slot, callback)
+    getKeyX(slot)
     {
+        const self = this;
         const normalizedSlot = this.normalizeSlot(slot);
-        this.openSecretDoc(
-            function (secretDoc) {
-                const keyX = secretDoc.evaluate("//table[@class='waffle']/tbody/tr/td[text()='" + normalizedSlot + "']/following-sibling::td[1]//text()", secretDoc, null, XPathResult.STRING_TYPE).stringValue;
-                callback(keyX);
+        return new Promise(
+            function (resolve, reject) {
+                self.openSecretDoc().then(
+                    function (secretDoc) {
+                        const keyX = secretDoc.evaluate("//table[@class='waffle']/tbody/tr/td[text()='" + normalizedSlot + "']/following-sibling::td[1]//text()", secretDoc, null, XPathResult.STRING_TYPE).stringValue;
+                        resolve(keyX);
+                    }
+                );
             }
         );
     }
 
     /**
      * @param {number} slot
-     * @param {function} callback
+     * @returns {Promise}
      */
-    getKeyY(slot, callback)
+    getKeyY(slot)
     {
+        const self = this;
         const normalizedSlot = this.normalizeSlot(slot);
-        this.openSecretDoc(
-            function (secretDoc) {
-                const keyY = secretDoc.evaluate("//table[@class='waffle']/tbody/tr/td[text()='" + normalizedSlot + "']/following-sibling::td[2]//text()", secretDoc, null, XPathResult.STRING_TYPE).stringValue;
-                callback(keyY);
+        return new Promise(
+            function (resolve, reject) {
+                self.openSecretDoc().then(
+                    function (secretDoc) {
+                        const keyY = secretDoc.evaluate("//table[@class='waffle']/tbody/tr/td[text()='" + normalizedSlot + "']/following-sibling::td[2]//text()", secretDoc, null, XPathResult.STRING_TYPE).stringValue;
+                        resolve(keyY);
+                    }
+                );
             }
         );
     }
 
     /**
-     * @param {function} callback
+     * @returns {Promise}
      */
-    getKeyScramblerConstant(callback)
+    getKeyScramblerConstant()
     {
-        this.openSecretDoc(
-            function (secretDoc) {
-                const keyScramblerFunction = secretDoc.evaluate("//table[@class='waffle']/tbody/tr/td[contains(text(),'F(KeyX, KeyY) = ')]//text()", secretDoc, null, XPathResult.STRING_TYPE).stringValue;
+        const self = this;
+        return new Promise(
+            function (resolve, reject) {
+                self.openSecretDoc().then(
+                    function (secretDoc) {
+                        const keyScramblerFunction = secretDoc.evaluate("//table[@class='waffle']/tbody/tr/td[contains(text(),'F(KeyX, KeyY) = ')]//text()", secretDoc, null, XPathResult.STRING_TYPE).stringValue;
 
-                const regex = /^\s*F\(KeyX,\s*KeyY\)\s*=\s*\(\(\(KeyX\s*<<<\s*2\)\s*\^\s*KeyY\)\s*\+\s*([0-9A-Fa-f]{32})\)\s*<<<\s*87\s*$/g;
-                const matches = regex.exec(keyScramblerFunction);
-                if (matches === null) {
-                    throw Error("Could not identify key scrambler constant in formula " + keyScramblerFunction);
-                }
-                const c = matches[1];
-                callback(c);
+                        const regex = /^\s*F\(KeyX,\s*KeyY\)\s*=\s*\(\(\(KeyX\s*<<<\s*2\)\s*\^\s*KeyY\)\s*\+\s*([0-9A-Fa-f]{32})\)\s*<<<\s*87\s*$/g;
+                        const matches = regex.exec(keyScramblerFunction);
+                        if (matches === null) {
+                            reject(Error("Could not identify key scrambler constant in formula " + keyScramblerFunction));
+                        }
+                        const c = matches[1];
+                        resolve(c);
+                    }
+                );
             }
         );
     }
@@ -71,31 +86,37 @@ class SecretProvider
     }
 
     /**
-     * @param {function} callback
+     * @returns {Promise}
      */
-    openSecretDoc(callback)
+    openSecretDoc()
     {
-        if (this.secretDoc !== null) {
-            callback(this.secretDoc)
-        } else {
-            const self = this;
-            const request = new XMLHttpRequest();
-            request.open("GET", "https://docs.google.com/spreadsheets/d/18zzG3p_30cu6nPf3BkvWWDPxqJBE329fREVtpPFisP8/edit", true);
-            request.addEventListener(
-                "load",
-                function (event) {
-                    const parser = new DOMParser();
-                    self.secretDoc = parser.parseFromString(request.responseText, "text/html");
-                    callback(self.secretDoc);
+        const self = this;
+        return new Promise(
+            function (resolve, reject) {
+                if (self.secretDoc !== null) {
+                    resolve(self.secretDoc)
+                } else {
+                    const request = new XMLHttpRequest();
+                    const crossOriginProxy = "https://cors-anywhere.herokuapp.com/";
+                    const sheetUrl = "https://docs.google.com/spreadsheets/d/18zzG3p_30cu6nPf3BkvWWDPxqJBE329fREVtpPFisP8/edit";
+                    request.open("GET", crossOriginProxy + sheetUrl, true);
+                    request.addEventListener(
+                        "load",
+                        function (event) {
+                            const parser = new DOMParser();
+                            self.secretDoc = parser.parseFromString(request.responseText, "text/html");
+                            resolve(self.secretDoc);
+                        }
+                    );
+                    request.addEventListener(
+                        "error",
+                        function (event) {
+                            reject(Error("Could not retrieve secret document (HTTP Status " + request.status + ")"));
+                        }
+                    );
+                    request.send();
                 }
-            );
-            request.addEventListener(
-                "error",
-                function (event) {
-                    throw Error("Could not retrieve secret document (HTTP Status " + request.status + ")");
-                }
-            );
-            request.send();
-        }
+            }
+        );
     }
 }

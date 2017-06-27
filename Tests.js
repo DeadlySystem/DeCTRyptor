@@ -87,7 +87,7 @@ function assertAreSame(expected, actual)
 
 
 const secretProvider = new SecretProvider();
-secretProvider.getKeyScramblerConstant(
+secretProvider.getKeyScramblerConstant().then(
     function (c) {
         const engine = new CTRCryptoEngine(CTRCryptoEngine.stringKeyToArrayBuffer(c));
 
